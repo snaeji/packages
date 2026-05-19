@@ -1,3 +1,7 @@
+## 2.18.2
+
+* Adds `colorScheme` support for cloud-based maps styling brightness.
+
 ## 2.18.1
 
 * Removes the requirement to use static builds with Swift Package Manager.

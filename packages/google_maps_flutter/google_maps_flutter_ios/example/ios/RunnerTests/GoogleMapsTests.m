@@ -250,7 +250,8 @@
                                                buildingsEnabled:nil
                                                      markerType:FGMPlatformMarkerTypeMarker
                                                           mapId:nil
-                                                          style:nil]
+                                                          style:nil
+                                                    colorScheme:nil]
                      initialCircles:@[]
                      initialMarkers:@[]
                     initialPolygons:@[]

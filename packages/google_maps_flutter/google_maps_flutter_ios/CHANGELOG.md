@@ -1,3 +1,7 @@
+## 2.18.2
+
+* Adds `colorScheme` support for cloud-based maps styling brightness.
+
 ## 2.18.1
 
 * Removes conditional header logic that broke add-to-app builds.

@@ -484,6 +484,9 @@ class PlatformMapViewCreationParams {
 
 enum PlatformMarkerType { marker, advancedMarker }
 
+/// Pigeon equivalent of MapColorScheme.
+enum PlatformMapColorScheme { light, dark, followSystem }
+
 /// Pigeon equivalent of MapConfiguration.
 class PlatformMapConfiguration {
   PlatformMapConfiguration({
@@ -508,6 +511,7 @@ class PlatformMapConfiguration {
     required this.markerType,
     required this.mapId,
     required this.style,
+    required this.colorScheme,
   });
 
   final bool? compassEnabled;
@@ -531,6 +535,7 @@ class PlatformMapConfiguration {
   final PlatformMarkerType markerType;
   final String? mapId;
   final String? style;
+  final PlatformMapColorScheme? colorScheme;
 }
 
 /// Pigeon representation of an x,y coordinate.

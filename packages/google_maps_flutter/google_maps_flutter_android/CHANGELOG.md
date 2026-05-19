@@ -1,3 +1,7 @@
+## 2.19.9
+
+* Adds `colorScheme` support for cloud-based maps styling brightness.
+
 ## 2.19.8
 
 * Updates internal implementation to use Kotlin Pigeon.

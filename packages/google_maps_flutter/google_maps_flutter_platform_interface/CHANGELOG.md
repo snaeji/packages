@@ -1,3 +1,7 @@
+## 2.15.1
+
+* Updates `colorScheme` doc comment to reflect Android and iOS support.
+
 ## 2.15.0
 
 * Adds support for `colorScheme` for cloud-based maps styling brightness in web.

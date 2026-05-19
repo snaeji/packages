@@ -522,6 +522,36 @@ public class ConvertTest {
   }
 
   @Test
+  public void toMapColorScheme_light() {
+    Assert.assertEquals(
+        com.google.android.gms.maps.model.MapColorScheme.LIGHT,
+        Convert.toMapColorScheme(PlatformMapColorScheme.LIGHT));
+  }
+
+  @Test
+  public void toMapColorScheme_dark() {
+    Assert.assertEquals(
+        com.google.android.gms.maps.model.MapColorScheme.DARK,
+        Convert.toMapColorScheme(PlatformMapColorScheme.DARK));
+  }
+
+  @Test
+  public void toMapColorScheme_followSystem() {
+    Assert.assertEquals(
+        com.google.android.gms.maps.model.MapColorScheme.FOLLOW_SYSTEM,
+        Convert.toMapColorScheme(PlatformMapColorScheme.FOLLOW_SYSTEM));
+  }
+
+  @Test
+  public void interpretMapConfiguration_handlesColorScheme() {
+    final PlatformMapConfiguration config =
+        getMinimalConfigurationBuilder().setColorScheme(PlatformMapColorScheme.DARK).build();
+    Convert.interpretMapConfiguration(config, optionsSink);
+    verify(optionsSink, times(1))
+        .setMapColorScheme(com.google.android.gms.maps.model.MapColorScheme.DARK);
+  }
+
+  @Test
   public void interpretMapConfiguration_handlesUnboundedCameraTargetBounds() {
     final PlatformMapConfiguration config =
         getMinimalConfigurationBuilder()
@@ -859,6 +889,7 @@ public class ConvertTest {
     private @Nullable PlatformMarkerType markerType;
     private @Nullable String mapId;
     private @Nullable String style;
+    private @Nullable PlatformMapColorScheme colorScheme;
 
     public @NonNull PlatformMapConfigurationBuilder setCompassEnabled(@Nullable Boolean setterArg) {
       this.compassEnabled = setterArg;
@@ -982,6 +1013,12 @@ public class ConvertTest {
       return this;
     }
 
+    public @NonNull PlatformMapConfigurationBuilder setColorScheme(
+        @Nullable PlatformMapColorScheme setterArg) {
+      this.colorScheme = setterArg;
+      return this;
+    }
+
     public @NonNull PlatformMapConfiguration build() {
       return new PlatformMapConfiguration(
           compassEnabled,
@@ -1004,7 +1041,8 @@ public class ConvertTest {
           liteModeEnabled,
           Objects.requireNonNull(markerType),
           mapId,
-          style);
+          style,
+          colorScheme);
     }
   }
 }
