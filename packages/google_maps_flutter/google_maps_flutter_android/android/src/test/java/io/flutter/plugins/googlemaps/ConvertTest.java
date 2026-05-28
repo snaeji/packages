@@ -522,24 +522,16 @@ public class ConvertTest {
   }
 
   @Test
-  public void toMapColorScheme_light() {
-    Assert.assertEquals(
-        com.google.android.gms.maps.model.MapColorScheme.LIGHT,
-        Convert.toMapColorScheme(PlatformMapColorScheme.LIGHT));
-  }
-
-  @Test
-  public void toMapColorScheme_dark() {
-    Assert.assertEquals(
-        com.google.android.gms.maps.model.MapColorScheme.DARK,
-        Convert.toMapColorScheme(PlatformMapColorScheme.DARK));
-  }
-
-  @Test
-  public void toMapColorScheme_followSystem() {
-    Assert.assertEquals(
-        com.google.android.gms.maps.model.MapColorScheme.FOLLOW_SYSTEM,
-        Convert.toMapColorScheme(PlatformMapColorScheme.FOLLOW_SYSTEM));
+  public void toMapColorScheme_mapsAllPlatformValues() {
+    for (PlatformMapColorScheme value : PlatformMapColorScheme.values()) {
+      final int expected =
+          switch (value) {
+            case LIGHT -> com.google.android.gms.maps.model.MapColorScheme.LIGHT;
+            case DARK -> com.google.android.gms.maps.model.MapColorScheme.DARK;
+            case FOLLOW_SYSTEM -> com.google.android.gms.maps.model.MapColorScheme.FOLLOW_SYSTEM;
+          };
+      Assert.assertEquals(expected, Convert.toMapColorScheme(value));
+    }
   }
 
   @Test
