@@ -1,6 +1,14 @@
-## 2.18.2
+## 2.18.4
 
 * Adds `colorScheme` support for cloud-based maps styling brightness.
+
+## 2.18.3
+
+* Updates README to include setup information.
+
+## 2.18.2
+
+* Adds attribution ID for Google Maps SDK usage.
 
 ## 2.18.1
 

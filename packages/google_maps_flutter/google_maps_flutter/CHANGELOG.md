@@ -1,6 +1,11 @@
-## 2.17.1
+## 2.17.2
 
 * Updates `colorScheme` doc comment to reflect Android and iOS support.
+
+## 2.17.1
+
+* Updates README to link to implementation packages for platform-specific
+  setup information.
 
 ## 2.17.0
 
