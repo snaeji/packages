@@ -7,6 +7,8 @@
 #import "FGMImageUtils.h"
 #import "FGMConversionUtils.h"
 
+#import <CommonCrypto/CommonDigest.h>
+
 @import Foundation;
 
 /// This method is deprecated within the context of `BitmapDescriptor.fromBytes` handling in the
@@ -46,8 +48,89 @@ static UIImage *scaledImageWithSize(UIImage *image, CGSize size);
 static UIImage *scaledImageWithWidthHeight(UIImage *image, NSNumber *width, NSNumber *height,
                                            CGFloat screenScale);
 
+/// Creates a UIImage from a Pigeon bitmap without consulting the icon cache.
+static UIImage *FGMIconFromBitmapUncached(FGMPlatformBitmap *platformBitmap,
+                                          NSObject<FGMAssetProvider> *assetProvider,
+                                          CGFloat screenScale);
+
+static NSString *FGMSHA256HexForData(NSData *data) {
+  unsigned char digest[CC_SHA256_DIGEST_LENGTH];
+  CC_SHA256(data.bytes, (CC_LONG)data.length, digest);
+  NSMutableString *hex = [NSMutableString stringWithCapacity:CC_SHA256_DIGEST_LENGTH * 2];
+  for (unsigned int i = 0; i < CC_SHA256_DIGEST_LENGTH; i++) {
+    [hex appendFormat:@"%02x", digest[i]];
+  }
+  return hex;
+}
+
+/// Returns a key uniquely identifying the UIImage that
+/// FGMIconFromBitmapUncached produces for this descriptor, or nil for
+/// descriptor types that are not cached (legacy descriptor types and pin
+/// configs).
+static NSString *FGMCacheKeyForBitmap(FGMPlatformBitmap *platformBitmap,
+                                      NSObject<FGMAssetProvider> *assetProvider,
+                                      CGFloat screenScale) {
+  id bitmap = platformBitmap.bitmap;
+  if ([bitmap isKindOfClass:[FGMPlatformBitmapAssetMap class]]) {
+    FGMPlatformBitmapAssetMap *assetMap = bitmap;
+    // The asset provider participates in the key because the same asset name
+    // can resolve to different images across Flutter engines (add-to-app).
+    return [NSString stringWithFormat:@"asset|%p|%@|%ld|%g|%@|%@|%g", assetProvider,
+                                      assetMap.assetName, (long)assetMap.bitmapScaling,
+                                      assetMap.imagePixelRatio, (id)assetMap.width ?: @"-",
+                                      (id)assetMap.height ?: @"-", (double)screenScale];
+  }
+  if ([bitmap isKindOfClass:[FGMPlatformBitmapBytesMap class]]) {
+    FGMPlatformBitmapBytesMap *bytesMap = bitmap;
+    return [NSString stringWithFormat:@"bytes|%@|%ld|%g|%@|%@|%g",
+                                      FGMSHA256HexForData(bytesMap.byteData.data),
+                                      (long)bytesMap.bitmapScaling, bytesMap.imagePixelRatio,
+                                      (id)bytesMap.width ?: @"-", (id)bytesMap.height ?: @"-",
+                                      (double)screenScale];
+  }
+  if ([bitmap isKindOfClass:[FGMPlatformBitmapDefaultMarker class]]) {
+    FGMPlatformBitmapDefaultMarker *defaultMarker = bitmap;
+    return [NSString stringWithFormat:@"default|%@", defaultMarker.hue];
+  }
+  return nil;
+}
+
+/// Cache of icons by descriptor content, so identical descriptors yield the
+/// same UIImage instance. The Maps SDK caches marker textures by UIImage
+/// instance identity, so instance sharing is what lets N markers with the same
+/// icon share one texture instead of holding N copies
+/// (https://developers.google.com/maps/documentation/ios-sdk/marker#customize_the_marker_image).
+/// NSCache evicts automatically under memory pressure; a miss only costs a
+/// re-decode.
+static NSCache<NSString *, UIImage *> *FGMIconCache(void) {
+  static NSCache<NSString *, UIImage *> *cache;
+  static dispatch_once_t onceToken;
+  dispatch_once(&onceToken, ^{
+    cache = [[NSCache alloc] init];
+    cache.countLimit = 100;
+  });
+  return cache;
+}
+
 UIImage *FGMIconFromBitmap(FGMPlatformBitmap *platformBitmap,
                            NSObject<FGMAssetProvider> *assetProvider, CGFloat screenScale) {
+  NSString *cacheKey = FGMCacheKeyForBitmap(platformBitmap, assetProvider, screenScale);
+  if (cacheKey) {
+    UIImage *cachedImage = [FGMIconCache() objectForKey:cacheKey];
+    if (cachedImage) {
+      return cachedImage;
+    }
+  }
+  UIImage *image = FGMIconFromBitmapUncached(platformBitmap, assetProvider, screenScale);
+  if (cacheKey && image) {
+    [FGMIconCache() setObject:image forKey:cacheKey];
+  }
+  return image;
+}
+
+static UIImage *FGMIconFromBitmapUncached(FGMPlatformBitmap *platformBitmap,
+                                          NSObject<FGMAssetProvider> *assetProvider,
+                                          CGFloat screenScale) {
   assert(screenScale > 0 && "Screen scale must be greater than 0");
   // See comment in messages.dart for why this is so loosely typed. See also
   // https://github.com/flutter/flutter/issues/117819.
