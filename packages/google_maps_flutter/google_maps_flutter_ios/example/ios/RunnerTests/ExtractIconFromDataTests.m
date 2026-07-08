@@ -9,6 +9,7 @@
 
 @interface ExtractIconFromDataTests : XCTestCase
 - (UIImage *)createOnePixelImage;
+- (UIImage *)createImageWithSize:(CGSize)size;
 @end
 
 @implementation ExtractIconFromDataTests
@@ -29,8 +30,9 @@
 
   CGFloat screenScale = 3.0;
 
-  UIImage *resultImage =
-      FGMIconFromBitmap([FGMPlatformBitmap makeWithBitmap:bitmap], assetProvider, screenScale);
+  UIImage *resultImage = FGMIconFromBitmap([FGMPlatformBitmap makeWithBitmap:bitmap],
+                                           assetProvider, screenScale,
+                                           /*downsampleToScreenScale=*/YES);
 
   XCTAssertNotNil(resultImage);
   XCTAssertEqual(resultImage.scale, 1.0);
@@ -55,13 +57,72 @@
 
   CGFloat screenScale = 3.0;
 
-  UIImage *resultImage =
-      FGMIconFromBitmap([FGMPlatformBitmap makeWithBitmap:bitmap], assetProvider, screenScale);
+  UIImage *resultImage = FGMIconFromBitmap([FGMPlatformBitmap makeWithBitmap:bitmap],
+                                           assetProvider, screenScale,
+                                           /*downsampleToScreenScale=*/YES);
 
   XCTAssertNotNil(resultImage);
   XCTAssertEqual(resultImage.scale, 10);
   XCTAssertEqual(resultImage.size.width, 0.1);
   XCTAssertEqual(resultImage.size.height, 0.1);
+}
+
+- (void)testExtractIconFromDataAssetAutoWithScaleAboveScreenScaleIsDownsampled {
+  UIImage *testImage = [self createImageWithSize:CGSizeMake(10, 10)];
+
+  NSString *assetName = @"fakeLargeImageName";
+  TestAssetProvider *assetProvider = [[TestAssetProvider alloc] initWithImage:testImage
+                                                                 forAssetName:assetName
+                                                                      package:nil];
+
+  FGMPlatformBitmapAssetMap *bitmap =
+      [FGMPlatformBitmapAssetMap makeWithAssetName:assetName
+                                     bitmapScaling:FGMPlatformMapBitmapScalingAuto
+                                   imagePixelRatio:5
+                                             width:nil
+                                            height:nil];
+
+  CGFloat screenScale = 3.0;
+
+  UIImage *resultImage = FGMIconFromBitmap([FGMPlatformBitmap makeWithBitmap:bitmap],
+                                           assetProvider, screenScale,
+                                           /*downsampleToScreenScale=*/YES);
+
+  XCTAssertNotNil(resultImage);
+  // 10 pixels at imagePixelRatio 5 is 2 points — more pixels than 2 points can
+  // show at the screen scale, so the bitmap is resampled down to screen density.
+  XCTAssertEqual(resultImage.scale, screenScale);
+  XCTAssertEqual(resultImage.size.width, 2.0);
+  XCTAssertEqual(resultImage.size.height, 2.0);
+}
+
+- (void)testExtractIconFromDataAssetAutoWithScaleWithoutDownsamplingKeepsPixels {
+  UIImage *testImage = [self createImageWithSize:CGSizeMake(10, 10)];
+
+  NSString *assetName = @"fakeLargeImageName";
+  TestAssetProvider *assetProvider = [[TestAssetProvider alloc] initWithImage:testImage
+                                                                 forAssetName:assetName
+                                                                      package:nil];
+
+  FGMPlatformBitmapAssetMap *bitmap =
+      [FGMPlatformBitmapAssetMap makeWithAssetName:assetName
+                                     bitmapScaling:FGMPlatformMapBitmapScalingAuto
+                                   imagePixelRatio:5
+                                             width:nil
+                                            height:nil];
+
+  CGFloat screenScale = 3.0;
+
+  UIImage *resultImage = FGMIconFromBitmap([FGMPlatformBitmap makeWithBitmap:bitmap],
+                                           assetProvider, screenScale,
+                                           /*downsampleToScreenScale=*/NO);
+
+  XCTAssertNotNil(resultImage);
+  // Without downsampling (ground overlays), the scale is only reinterpreted and
+  // all source pixels are kept.
+  XCTAssertEqual(resultImage.scale, 5);
+  XCTAssertEqual(resultImage.size.width, 2.0);
+  XCTAssertEqual(resultImage.size.height, 2.0);
 }
 
 - (void)testExtractIconFromDataAssetAutoAndSizeWithSameAspectRatio {
@@ -83,8 +144,9 @@
 
   CGFloat screenScale = 3.0;
 
-  UIImage *resultImage =
-      FGMIconFromBitmap([FGMPlatformBitmap makeWithBitmap:bitmap], assetProvider, screenScale);
+  UIImage *resultImage = FGMIconFromBitmap([FGMPlatformBitmap makeWithBitmap:bitmap],
+                                           assetProvider, screenScale,
+                                           /*downsampleToScreenScale=*/YES);
   XCTAssertNotNil(resultImage);
   XCTAssertEqual(testImage.scale, 1.0);
 
@@ -116,12 +178,44 @@
 
   CGFloat screenScale = 3.0;
 
-  UIImage *resultImage =
-      FGMIconFromBitmap([FGMPlatformBitmap makeWithBitmap:bitmap], assetProvider, screenScale);
+  UIImage *resultImage = FGMIconFromBitmap([FGMPlatformBitmap makeWithBitmap:bitmap],
+                                           assetProvider, screenScale,
+                                           /*downsampleToScreenScale=*/YES);
   XCTAssertNotNil(resultImage);
   XCTAssertEqual(resultImage.scale, screenScale);
   XCTAssertEqual(resultImage.size.width, width);
   XCTAssertEqual(resultImage.size.height, height);
+}
+
+- (void)testExtractIconFromDataAssetAutoAndSizeWithSameAspectRatioAboveScreenScaleIsDownsampled {
+  UIImage *testImage = [self createImageWithSize:CGSizeMake(10, 10)];
+
+  NSString *assetName = @"fakeLargeImageName";
+  TestAssetProvider *assetProvider = [[TestAssetProvider alloc] initWithImage:testImage
+                                                                 forAssetName:assetName
+                                                                      package:nil];
+
+  const CGFloat width = 2.0;
+  FGMPlatformBitmapAssetMap *bitmap =
+      [FGMPlatformBitmapAssetMap makeWithAssetName:assetName
+                                     bitmapScaling:FGMPlatformMapBitmapScalingAuto
+                                   imagePixelRatio:1
+                                             width:@(width)
+                                            height:nil];
+
+  CGFloat screenScale = 3.0;
+
+  UIImage *resultImage = FGMIconFromBitmap([FGMPlatformBitmap makeWithBitmap:bitmap],
+                                           assetProvider, screenScale,
+                                           /*downsampleToScreenScale=*/YES);
+
+  XCTAssertNotNil(resultImage);
+  // The matching aspect ratio takes the scale-reinterpretation shortcut, which
+  // would leave all 10 source pixels behind a 2-point image; the bitmap is then
+  // resampled down to screen density.
+  XCTAssertEqual(resultImage.scale, screenScale);
+  XCTAssertEqual(resultImage.size.width, width);
+  XCTAssertEqual(resultImage.size.height, width);
 }
 
 - (void)testExtractIconFromDataAssetNoScaling {
@@ -141,8 +235,9 @@
 
   CGFloat screenScale = 3.0;
 
-  UIImage *resultImage =
-      FGMIconFromBitmap([FGMPlatformBitmap makeWithBitmap:bitmap], assetProvider, screenScale);
+  UIImage *resultImage = FGMIconFromBitmap([FGMPlatformBitmap makeWithBitmap:bitmap],
+                                           assetProvider, screenScale,
+                                           /*downsampleToScreenScale=*/YES);
 
   XCTAssertNotNil(resultImage);
   XCTAssertEqual(resultImage.scale, 1.0);
@@ -166,7 +261,8 @@
   CGFloat screenScale = 3.0;
 
   UIImage *resultImage = FGMIconFromBitmap([FGMPlatformBitmap makeWithBitmap:bitmap],
-                                           [[TestAssetProvider alloc] init], screenScale);
+                                           [[TestAssetProvider alloc] init], screenScale,
+                                           /*downsampleToScreenScale=*/YES);
 
   XCTAssertNotNil(resultImage);
   XCTAssertEqual(resultImage.scale, 1.0);
@@ -190,11 +286,38 @@
   CGFloat screenScale = 3.0;
 
   UIImage *resultImage = FGMIconFromBitmap([FGMPlatformBitmap makeWithBitmap:bitmap],
-                                           [[TestAssetProvider alloc] init], screenScale);
+                                           [[TestAssetProvider alloc] init], screenScale,
+                                           /*downsampleToScreenScale=*/YES);
   XCTAssertNotNil(resultImage);
   XCTAssertEqual(resultImage.scale, 10);
   XCTAssertEqual(resultImage.size.width, 0.1);
   XCTAssertEqual(resultImage.size.height, 0.1);
+}
+
+- (void)testExtractIconFromDataBytesAutoWithScalingAboveScreenScaleIsDownsampled {
+  UIImage *testImage = [self createImageWithSize:CGSizeMake(10, 10)];
+  NSData *pngData = UIImagePNGRepresentation(testImage);
+  XCTAssertNotNil(pngData);
+
+  FlutterStandardTypedData *typedData = [FlutterStandardTypedData typedDataWithBytes:pngData];
+  FGMPlatformBitmapBytesMap *bitmap =
+      [FGMPlatformBitmapBytesMap makeWithByteData:typedData
+                                    bitmapScaling:FGMPlatformMapBitmapScalingAuto
+                                  imagePixelRatio:5
+                                            width:nil
+                                           height:nil];
+
+  CGFloat screenScale = 3.0;
+
+  UIImage *resultImage = FGMIconFromBitmap([FGMPlatformBitmap makeWithBitmap:bitmap],
+                                           [[TestAssetProvider alloc] init], screenScale,
+                                           /*downsampleToScreenScale=*/YES);
+  XCTAssertNotNil(resultImage);
+  // 10 pixels at imagePixelRatio 5 is 2 points — more pixels than 2 points can
+  // show at the screen scale, so the bitmap is resampled down to screen density.
+  XCTAssertEqual(resultImage.scale, screenScale);
+  XCTAssertEqual(resultImage.size.width, 2.0);
+  XCTAssertEqual(resultImage.size.height, 2.0);
 }
 
 - (void)testExtractIconFromDataBytesAutoAndSizeWithSameAspectRatio {
@@ -215,7 +338,8 @@
   CGFloat screenScale = 3.0;
 
   UIImage *resultImage = FGMIconFromBitmap([FGMPlatformBitmap makeWithBitmap:bitmap],
-                                           [[TestAssetProvider alloc] init], screenScale);
+                                           [[TestAssetProvider alloc] init], screenScale,
+                                           /*downsampleToScreenScale=*/YES);
 
   XCTAssertNotNil(resultImage);
   XCTAssertEqual(testImage.scale, 1.0);
@@ -247,7 +371,8 @@
   CGFloat screenScale = 3.0;
 
   UIImage *resultImage = FGMIconFromBitmap([FGMPlatformBitmap makeWithBitmap:bitmap],
-                                           [[TestAssetProvider alloc] init], screenScale);
+                                           [[TestAssetProvider alloc] init], screenScale,
+                                           /*downsampleToScreenScale=*/YES);
   XCTAssertNotNil(resultImage);
   XCTAssertEqual(resultImage.scale, screenScale);
   XCTAssertEqual(resultImage.size.width, width);
@@ -270,7 +395,8 @@
   CGFloat screenScale = 3.0;
 
   UIImage *resultImage = FGMIconFromBitmap([FGMPlatformBitmap makeWithBitmap:bitmap],
-                                           [[TestAssetProvider alloc] init], screenScale);
+                                           [[TestAssetProvider alloc] init], screenScale,
+                                           /*downsampleToScreenScale=*/YES);
   XCTAssertNotNil(resultImage);
   XCTAssertEqual(resultImage.scale, 1.0);
   XCTAssertEqual(resultImage.size.width, 1.0);
@@ -299,8 +425,9 @@
 
   CGFloat screenScale = 3.0;
 
-  UIImage *resultImage =
-      FGMIconFromBitmap([FGMPlatformBitmap makeWithBitmap:pinConfig], assetProvider, screenScale);
+  UIImage *resultImage = FGMIconFromBitmap([FGMPlatformBitmap makeWithBitmap:pinConfig],
+                                           assetProvider, screenScale,
+                                           /*downsampleToScreenScale=*/YES);
 
   // PinConfig may return nil on old Google Maps SDK versions (<=8.4.0).
   // Also, due to a Google Maps SDK issue (https://issuetracker.google.com/issues/370536110),
@@ -327,8 +454,9 @@
 
   CGFloat screenScale = 3.0;
 
-  UIImage *resultImage =
-      FGMIconFromBitmap([FGMPlatformBitmap makeWithBitmap:pinConfig], assetProvider, screenScale);
+  UIImage *resultImage = FGMIconFromBitmap([FGMPlatformBitmap makeWithBitmap:pinConfig],
+                                           assetProvider, screenScale,
+                                           /*downsampleToScreenScale=*/YES);
 
   // PinConfig returns nil on iOS versions without GMSPinImageOptions support (< iOS 16.0).
   // On simulators, GMSPinImage may also return a zero-dimension image. Both cases are acceptable
@@ -369,8 +497,9 @@
 
   CGFloat screenScale = 3.0;
 
-  UIImage *resultImage =
-      FGMIconFromBitmap([FGMPlatformBitmap makeWithBitmap:pinConfig], assetProvider, screenScale);
+  UIImage *resultImage = FGMIconFromBitmap([FGMPlatformBitmap makeWithBitmap:pinConfig],
+                                           assetProvider, screenScale,
+                                           /*downsampleToScreenScale=*/YES);
 
   // PinConfig returns nil on iOS versions without GMSPinImageOptions support (< iOS 16.0).
   // On simulators, GMSPinImage may also return a zero-dimension image. Both cases are acceptable
@@ -423,7 +552,10 @@
 }
 
 - (UIImage *)createOnePixelImage {
-  CGSize size = CGSizeMake(1, 1);
+  return [self createImageWithSize:CGSizeMake(1, 1)];
+}
+
+- (UIImage *)createImageWithSize:(CGSize)size {
   UIGraphicsImageRendererFormat *format = [UIGraphicsImageRendererFormat defaultFormat];
   format.scale = 1.0;
   format.opaque = YES;

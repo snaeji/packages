@@ -48,10 +48,25 @@ static UIImage *scaledImageWithSize(UIImage *image, CGSize size);
 static UIImage *scaledImageWithWidthHeight(UIImage *image, NSNumber *width, NSNumber *height,
                                            CGFloat screenScale);
 
+/// Resamples an image down to the screen's pixel density when it carries more pixels than the
+/// screen can display at the image's point size. The scaling paths above prefer reinterpreting
+/// UIImage.scale over redrawing, so a high-resolution source keeps its full bitmap; the Maps SDK
+/// rasterizes its marker texture from that bitmap rather than from the displayed size, making
+/// each texture several times larger than what is rendered. Redrawing at the screen scale caps
+/// the texture at the displayed resolution with no visible difference.
+///
+/// Returns the original image when its scale is at or below the screen scale, or when the
+/// resampled bitmap would round down to zero pixels.
+///
+/// @param image The UIImage to resample.
+/// @param screenScale The current screen scale.
+/// @return UIImage Returns the resampled UIImage, or the original image.
+static UIImage *FGMImageDownsampledToScreenScale(UIImage *image, CGFloat screenScale);
+
 /// Creates a UIImage from a Pigeon bitmap without consulting the icon cache.
 static UIImage *FGMIconFromBitmapUncached(FGMPlatformBitmap *platformBitmap,
                                           NSObject<FGMAssetProvider> *assetProvider,
-                                          CGFloat screenScale);
+                                          CGFloat screenScale, BOOL downsampleToScreenScale);
 
 static NSString *FGMSHA256HexForData(NSData *data) {
   unsigned char digest[CC_SHA256_DIGEST_LENGTH];
@@ -69,24 +84,25 @@ static NSString *FGMSHA256HexForData(NSData *data) {
 /// configs).
 static NSString *FGMCacheKeyForBitmap(FGMPlatformBitmap *platformBitmap,
                                       NSObject<FGMAssetProvider> *assetProvider,
-                                      CGFloat screenScale) {
+                                      CGFloat screenScale, BOOL downsampleToScreenScale) {
   id bitmap = platformBitmap.bitmap;
   if ([bitmap isKindOfClass:[FGMPlatformBitmapAssetMap class]]) {
     FGMPlatformBitmapAssetMap *assetMap = bitmap;
     // The asset provider participates in the key because the same asset name
     // can resolve to different images across Flutter engines (add-to-app).
-    return [NSString stringWithFormat:@"asset|%p|%@|%ld|%g|%@|%@|%g", assetProvider,
+    return [NSString stringWithFormat:@"asset|%p|%@|%ld|%g|%@|%@|%g|%d", assetProvider,
                                       assetMap.assetName, (long)assetMap.bitmapScaling,
                                       assetMap.imagePixelRatio, (id)assetMap.width ?: @"-",
-                                      (id)assetMap.height ?: @"-", (double)screenScale];
+                                      (id)assetMap.height ?: @"-", (double)screenScale,
+                                      downsampleToScreenScale];
   }
   if ([bitmap isKindOfClass:[FGMPlatformBitmapBytesMap class]]) {
     FGMPlatformBitmapBytesMap *bytesMap = bitmap;
-    return [NSString stringWithFormat:@"bytes|%@|%ld|%g|%@|%@|%g",
+    return [NSString stringWithFormat:@"bytes|%@|%ld|%g|%@|%@|%g|%d",
                                       FGMSHA256HexForData(bytesMap.byteData.data),
                                       (long)bytesMap.bitmapScaling, bytesMap.imagePixelRatio,
                                       (id)bytesMap.width ?: @"-", (id)bytesMap.height ?: @"-",
-                                      (double)screenScale];
+                                      (double)screenScale, downsampleToScreenScale];
   }
   if ([bitmap isKindOfClass:[FGMPlatformBitmapDefaultMarker class]]) {
     FGMPlatformBitmapDefaultMarker *defaultMarker = bitmap;
@@ -113,15 +129,18 @@ static NSCache<NSString *, UIImage *> *FGMIconCache(void) {
 }
 
 UIImage *FGMIconFromBitmap(FGMPlatformBitmap *platformBitmap,
-                           NSObject<FGMAssetProvider> *assetProvider, CGFloat screenScale) {
-  NSString *cacheKey = FGMCacheKeyForBitmap(platformBitmap, assetProvider, screenScale);
+                           NSObject<FGMAssetProvider> *assetProvider, CGFloat screenScale,
+                           BOOL downsampleToScreenScale) {
+  NSString *cacheKey =
+      FGMCacheKeyForBitmap(platformBitmap, assetProvider, screenScale, downsampleToScreenScale);
   if (cacheKey) {
     UIImage *cachedImage = [FGMIconCache() objectForKey:cacheKey];
     if (cachedImage) {
       return cachedImage;
     }
   }
-  UIImage *image = FGMIconFromBitmapUncached(platformBitmap, assetProvider, screenScale);
+  UIImage *image = FGMIconFromBitmapUncached(platformBitmap, assetProvider, screenScale,
+                                             downsampleToScreenScale);
   if (cacheKey && image) {
     [FGMIconCache() setObject:image forKey:cacheKey];
   }
@@ -130,7 +149,7 @@ UIImage *FGMIconFromBitmap(FGMPlatformBitmap *platformBitmap,
 
 static UIImage *FGMIconFromBitmapUncached(FGMPlatformBitmap *platformBitmap,
                                           NSObject<FGMAssetProvider> *assetProvider,
-                                          CGFloat screenScale) {
+                                          CGFloat screenScale, BOOL downsampleToScreenScale) {
   assert(screenScale > 0 && "Screen scale must be greater than 0");
   // See comment in messages.dart for why this is so loosely typed. See also
   // https://github.com/flutter/flutter/issues/117819.
@@ -184,6 +203,9 @@ static UIImage *FGMIconFromBitmapUncached(FGMPlatformBitmap *platformBitmap,
       } else {
         image = scaledImageWithScale(image, bitmapAssetMap.imagePixelRatio);
       }
+      if (downsampleToScreenScale) {
+        image = FGMImageDownsampledToScreenScale(image, screenScale);
+      }
     }
   } else if ([bitmap isKindOfClass:[FGMPlatformBitmapBytesMap class]]) {
     FGMPlatformBitmapBytesMap *bitmapBytesMap = bitmap;
@@ -201,6 +223,9 @@ static UIImage *FGMIconFromBitmapUncached(FGMPlatformBitmap *platformBitmap,
           image = scaledImageWithWidthHeight(image, width, height, screenScale);
         } else {
           image = scaledImageWithScale(image, bitmapBytesMap.imagePixelRatio);
+        }
+        if (downsampleToScreenScale) {
+          image = FGMImageDownsampledToScreenScale(image, screenScale);
         }
       } else {
         // No scaling, load image from bytes without scale parameter.
@@ -238,7 +263,8 @@ static UIImage *FGMIconFromBitmapUncached(FGMPlatformBitmap *platformBitmap,
       UIColor *color = FGMGetColorForPigeonColor(glyphColor);
       glyph = [[GMSPinImageGlyph alloc] initWithGlyphColor:color];
     } else if (glyphBitmap) {
-      UIImage *glyphImage = FGMIconFromBitmap(glyphBitmap, assetProvider, screenScale);
+      UIImage *glyphImage =
+          FGMIconFromBitmap(glyphBitmap, assetProvider, screenScale, downsampleToScreenScale);
       glyph = [[GMSPinImageGlyph alloc] initWithImage:glyphImage];
     }
 
@@ -331,6 +357,24 @@ UIImage *scaledImageWithWidthHeight(UIImage *image, NSNumber *width, NSNumber *h
   CGSize targetSize =
       CGSizeMake(round(targetWidth * screenScale), round(targetHeight * screenScale));
   return scaledImageWithSize(image, targetSize);
+}
+
+UIImage *FGMImageDownsampledToScreenScale(UIImage *image, CGFloat screenScale) {
+  if (image.scale <= screenScale + DBL_EPSILON) {
+    return image;
+  }
+  CGSize pointSize = image.size;
+  if (pointSize.width * screenScale < 1 || pointSize.height * screenScale < 1) {
+    return image;
+  }
+  UIGraphicsImageRendererFormat *format = [UIGraphicsImageRendererFormat defaultFormat];
+  format.scale = screenScale;
+  format.opaque = NO;
+  UIGraphicsImageRenderer *renderer = [[UIGraphicsImageRenderer alloc] initWithSize:pointSize
+                                                                             format:format];
+  return [renderer imageWithActions:^(UIGraphicsImageRendererContext *_Nonnull context) {
+    [image drawInRect:CGRectMake(0, 0, pointSize.width, pointSize.height)];
+  }];
 }
 
 BOOL FGMIsScalableWithScaleFactorFromSize(CGSize originalSize, CGSize targetSize) {

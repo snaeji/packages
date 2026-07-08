@@ -56,7 +56,10 @@
   groundOverlay.zIndex = (int)platformGroundOverlay.zIndex;
   groundOverlay.anchor =
       CGPointMake(platformGroundOverlay.anchor.x, platformGroundOverlay.anchor.y);
-  UIImage *image = FGMIconFromBitmap(platformGroundOverlay.image, assetProvider, screenScale);
+  // Ground overlays scale with map zoom, so high-resolution bitmaps keep their
+  // extra pixels rather than being downsampled to the screen scale.
+  UIImage *image = FGMIconFromBitmap(platformGroundOverlay.image, assetProvider, screenScale,
+                                     /*downsampleToScreenScale=*/NO);
   groundOverlay.icon = image;
   groundOverlay.bearing = platformGroundOverlay.bearing;
   groundOverlay.opacity = 1.0 - platformGroundOverlay.transparency;
@@ -130,7 +133,8 @@
                                          groundOverlay.bounds.southwest.latitude,
                                          groundOverlay.bounds.southwest.longitude)]
                              icon:FGMIconFromBitmap(groundOverlay.image, self.assetProvider,
-                                                    [self getScreenScale])];
+                                                    [self getScreenScale],
+                                                    /*downsampleToScreenScale=*/NO)];
     } else {
       NSAssert(groundOverlay.zoomLevel != nil,
                @"If ground overlay is initialized with position, zoomLevel is required");
@@ -138,7 +142,8 @@
           groundOverlayWithPosition:CLLocationCoordinate2DMake(groundOverlay.position.latitude,
                                                                groundOverlay.position.longitude)
                                icon:FGMIconFromBitmap(groundOverlay.image, self.assetProvider,
-                                                      [self getScreenScale])
+                                                      [self getScreenScale],
+                                                      /*downsampleToScreenScale=*/NO)
                           zoomLevel:[groundOverlay.zoomLevel doubleValue]];
     }
     FGMGroundOverlayController *controller =

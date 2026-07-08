@@ -82,7 +82,8 @@
     usingOpacityForVisibility:(BOOL)useOpacityForVisibility {
   marker.groundAnchor = FGMGetCGPointForPigeonPoint(platformMarker.anchor);
   marker.draggable = platformMarker.draggable;
-  UIImage *image = FGMIconFromBitmap(platformMarker.icon, assetProvider, screenScale);
+  UIImage *image = FGMIconFromBitmap(platformMarker.icon, assetProvider, screenScale,
+                                     /*downsampleToScreenScale=*/YES);
   marker.icon = image;
   marker.flat = platformMarker.flat;
   marker.position = FGMGetCoordinateForPigeonLatLng(platformMarker.position);
