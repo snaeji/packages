@@ -64,6 +64,9 @@ public class ConvertTest {
   @Before
   public void before() {
     mockCloseable = MockitoAnnotations.openMocks(this);
+    // The descriptor cache is static; clear it so descriptors cached with one
+    // test's mocks never leak into another test.
+    Convert.clearBitmapDescriptorCache();
   }
 
   @After
@@ -221,6 +224,137 @@ public class ConvertTest {
             bitmap, assetManager, 1.0f, bitmapDescriptorFactoryWrapper, flutterInjectorWrapper);
 
     Assert.assertEquals(mockBitmapDescriptor, result);
+  }
+
+  @Test
+  public void GetBitmapFromAssetCachesIdenticalDescriptors() throws Exception {
+    String fakeAssetName = "fake_asset_name";
+    String fakeAssetKey = "fake_asset_key";
+
+    when(flutterInjectorWrapper.getLookupKeyForAsset(fakeAssetName)).thenReturn(fakeAssetKey);
+    // Fresh stream per open() — a cache miss on the second call would consume
+    // a second stream.
+    when(assetManager.open(fakeAssetKey))
+        .thenAnswer(invocation -> TestImageUtils.buildImageInputStream());
+    when(bitmapDescriptorFactoryWrapper.fromBitmap(any())).thenReturn(mockBitmapDescriptor);
+
+    PlatformBitmapAssetMap first =
+        new PlatformBitmapAssetMap(
+            fakeAssetName,
+            PlatformMapBitmapScaling.AUTO,
+            /* imagePixelRatio */ 2.0,
+            /* width */ 15.0,
+            /* height */ null);
+    PlatformBitmapAssetMap second =
+        new PlatformBitmapAssetMap(
+            fakeAssetName,
+            PlatformMapBitmapScaling.AUTO,
+            /* imagePixelRatio */ 2.0,
+            /* width */ 15.0,
+            /* height */ null);
+
+    BitmapDescriptor firstResult =
+        Convert.getBitmapFromAsset(
+            first, assetManager, 1.0f, bitmapDescriptorFactoryWrapper, flutterInjectorWrapper);
+    BitmapDescriptor secondResult =
+        Convert.getBitmapFromAsset(
+            second, assetManager, 1.0f, bitmapDescriptorFactoryWrapper, flutterInjectorWrapper);
+
+    Assert.assertSame(firstResult, secondResult);
+    // The cached instance must be returned without re-reading or re-building.
+    verify(assetManager, times(1)).open(fakeAssetKey);
+    verify(bitmapDescriptorFactoryWrapper, times(1)).fromBitmap(any());
+  }
+
+  @Test
+  public void GetBitmapFromAssetDoesNotCacheAcrossDifferentDimensions() throws Exception {
+    String fakeAssetName = "fake_asset_name";
+    String fakeAssetKey = "fake_asset_key";
+
+    when(flutterInjectorWrapper.getLookupKeyForAsset(fakeAssetName)).thenReturn(fakeAssetKey);
+    when(assetManager.open(fakeAssetKey))
+        .thenAnswer(invocation -> TestImageUtils.buildImageInputStream());
+    when(bitmapDescriptorFactoryWrapper.fromBitmap(any())).thenReturn(mockBitmapDescriptor);
+
+    PlatformBitmapAssetMap first =
+        new PlatformBitmapAssetMap(
+            fakeAssetName,
+            PlatformMapBitmapScaling.AUTO,
+            /* imagePixelRatio */ 2.0,
+            /* width */ 15.0,
+            /* height */ null);
+    PlatformBitmapAssetMap second =
+        new PlatformBitmapAssetMap(
+            fakeAssetName,
+            PlatformMapBitmapScaling.AUTO,
+            /* imagePixelRatio */ 2.0,
+            /* width */ 20.0,
+            /* height */ null);
+
+    Convert.getBitmapFromAsset(
+        first, assetManager, 1.0f, bitmapDescriptorFactoryWrapper, flutterInjectorWrapper);
+    Convert.getBitmapFromAsset(
+        second, assetManager, 1.0f, bitmapDescriptorFactoryWrapper, flutterInjectorWrapper);
+
+    verify(assetManager, times(2)).open(fakeAssetKey);
+    verify(bitmapDescriptorFactoryWrapper, times(2)).fromBitmap(any());
+  }
+
+  @Test
+  public void GetBitmapFromBytesCachesIdenticalDescriptors() {
+    byte[] bmpData = Base64.decode(base64Image, Base64.DEFAULT);
+
+    when(bitmapDescriptorFactoryWrapper.fromBitmap(any())).thenReturn(mockBitmapDescriptor);
+
+    PlatformBitmapBytesMap first =
+        new PlatformBitmapBytesMap(
+            bmpData,
+            PlatformMapBitmapScaling.AUTO,
+            /* imagePixelRatio */ 2.0,
+            /* width */ 15.0,
+            /* height */ null);
+    PlatformBitmapBytesMap second =
+        new PlatformBitmapBytesMap(
+            bmpData.clone(),
+            PlatformMapBitmapScaling.AUTO,
+            /* imagePixelRatio */ 2.0,
+            /* width */ 15.0,
+            /* height */ null);
+
+    BitmapDescriptor firstResult =
+        Convert.getBitmapFromBytes(first, 1f, bitmapDescriptorFactoryWrapper);
+    BitmapDescriptor secondResult =
+        Convert.getBitmapFromBytes(second, 1f, bitmapDescriptorFactoryWrapper);
+
+    Assert.assertSame(firstResult, secondResult);
+    verify(bitmapDescriptorFactoryWrapper, times(1)).fromBitmap(any());
+  }
+
+  @Test
+  public void GetBitmapFromBytesDoesNotCacheAcrossDifferentScalingParams() {
+    byte[] bmpData = Base64.decode(base64Image, Base64.DEFAULT);
+
+    when(bitmapDescriptorFactoryWrapper.fromBitmap(any())).thenReturn(mockBitmapDescriptor);
+
+    PlatformBitmapBytesMap first =
+        new PlatformBitmapBytesMap(
+            bmpData,
+            PlatformMapBitmapScaling.AUTO,
+            /* imagePixelRatio */ 2.0,
+            /* width */ null,
+            /* height */ null);
+    PlatformBitmapBytesMap second =
+        new PlatformBitmapBytesMap(
+            bmpData,
+            PlatformMapBitmapScaling.AUTO,
+            /* imagePixelRatio */ 3.0,
+            /* width */ null,
+            /* height */ null);
+
+    Convert.getBitmapFromBytes(first, 1f, bitmapDescriptorFactoryWrapper);
+    Convert.getBitmapFromBytes(second, 1f, bitmapDescriptorFactoryWrapper);
+
+    verify(bitmapDescriptorFactoryWrapper, times(2)).fromBitmap(any());
   }
 
   @Test
